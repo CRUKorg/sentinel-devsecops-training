@@ -14,7 +14,7 @@
             "kind": "Scheduled",
             "apiVersion": "2023-12-01-preview",
             "properties": {
-                "displayName": "Detect CoreBackUp Deletion Activity from related Security Alerts",
+                "displayName": "CRUK - Detect CoreBackUp Deletion Activity from related Security Alerts",
                 "description": "The query identifies any efforts by an attacker to delete backup containers, while also searching for any security alerts that may be linked to the same activity, in order to uncover additional information about the attacker's actions.' \nThough such an activity could be legitimate as part of business operation, some ransomware actors may perform such operation to cause interruption to regular business services.",
                 "severity": "Medium",
                 "enabled": true,

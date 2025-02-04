@@ -32,7 +32,7 @@ jobs:
       sourceControlId: 'ff223626-90b5-4f40-a13d-e53fa4549e4f'
       rootDirectory: '${{ github.workspace }}'
       githubAuthToken: ${{ secrets.GITHUB_TOKEN }}
-      smartDeployment: 'true'
+      smartDeployment: 'false'
     permissions:
       contents: write
 

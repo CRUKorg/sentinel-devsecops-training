@@ -1,0 +1,72 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workspace": {
+            "type": "String"
+        }
+    },
+    "resources": [
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/alertRules/3b0c17bb-ba66-42b9-9767-f1aebeef4490')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/3b0c17bb-ba66-42b9-9767-f1aebeef4490')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/alertRules",
+            "kind": "Scheduled",
+            "apiVersion": "2023-12-01-preview",
+            "properties": {
+                "displayName": "CRUK - User added to Azure Active Directory Privileged Groups",
+                "description": "This will alert when a user is added to any of the Privileged Groups.\nFor further information on AuditLogs please see https://docs.microsoft.com/azure/active-directory/reports-monitoring/reference-audit-activities.\nFor Administrator role permissions in Azure Active Directory please see https://docs.microsoft.com/azure/active-directory/users-groups-roles/directory-assign-admin-roles",
+                "severity": "Medium",
+                "enabled": true,
+                "query": "let timeframe = 1h;\nlet OperationList = dynamic([\"Add member to role\",\"Add member to role in PIM requested (permanent)\"]);\nlet PrivilegedGroups = dynamic([\"UserAccountAdmins\",\"PrivilegedRoleAdmins\",\"TenantAdmins\"]);\nAuditLogs\n| where TimeGenerated >= ago(timeframe)\n| where LoggedByService =~ \"Core Directory\"\n| where Category =~ \"RoleManagement\"\n| where OperationName in~ (OperationList)\n| mv-expand TargetResources\n| extend modifiedProperties = parse_json(TargetResources).modifiedProperties\n| mv-expand modifiedProperties\n| extend DisplayName = tostring(parse_json(modifiedProperties).displayName), GroupName =  trim(@'\"',tostring(parse_json(modifiedProperties).newValue))\n| extend AppId = tostring(parse_json(parse_json(InitiatedBy).app).appId), InitiatedByDisplayName = tostring(parse_json(parse_json(InitiatedBy).app).displayName), ServicePrincipalId = tostring(parse_json(parse_json(InitiatedBy).app).servicePrincipalId), ServicePrincipalName = tostring(parse_json(parse_json(InitiatedBy).app).servicePrincipalName)\n| where DisplayName =~ \"Role.WellKnownObjectName\"\n| where GroupName in~ (PrivilegedGroups)\n// If you want to still alert for operations from PIM, remove below filtering for MS-PIM.\n| where InitiatedByDisplayName != \"MS-PIM\"\n| project TimeGenerated, AADOperationType, Category, OperationName, AADTenantId, AppId, InitiatedByDisplayName, ServicePrincipalId, ServicePrincipalName, DisplayName, GroupName\n| extend timestamp = TimeGenerated, AccountCustomEntity = ServicePrincipalName",
+                "queryFrequency": "P1D",
+                "queryPeriod": "P1D",
+                "triggerOperator": "GreaterThan",
+                "triggerThreshold": 0,
+                "suppressionDuration": "PT5H",
+                "suppressionEnabled": false,
+                "startTimeUtc": null,
+                "tactics": [
+                    "Persistence",
+                    "PrivilegeEscalation"
+                ],
+                "techniques": [
+                    "T1098",
+                    "T1078"
+                ],
+                "subTechniques": [],
+                "alertRuleTemplateName": "4d94d4a9-dc96-410a-8dea-4d4d4584188b",
+                "incidentConfiguration": {
+                    "createIncident": true,
+                    "groupingConfiguration": {
+                        "enabled": true,
+                        "reopenClosedIncident": false,
+                        "lookbackDuration": "P1D",
+                        "matchingMethod": "AllEntities",
+                        "groupByEntities": [],
+                        "groupByAlertDetails": null,
+                        "groupByCustomDetails": null
+                    }
+                },
+                "eventGroupingSettings": {
+                    "aggregationKind": "SingleAlert"
+                },
+                "alertDetailsOverride": null,
+                "customDetails": null,
+                "entityMappings": [
+                    {
+                        "entityType": "Account",
+                        "fieldMappings": [
+                            {
+                                "identifier": "FullName",
+                                "columnName": "AccountCustomEntity"
+                            }
+                        ]
+                    }
+                ],
+                "sentinelEntitiesMappings": null,
+                "templateVersion": null
+            }
+        }
+    ]
+}

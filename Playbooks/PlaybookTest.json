@@ -1,0 +1,1215 @@
+{
+    "properties": {
+        "provisioningState": "Succeeded",
+        "createdTime": "2024-10-09T12:07:48.6605904Z",
+        "changedTime": "2024-10-09T12:25:52.8773134Z",
+        "state": "Enabled",
+        "version": "08584731301326090271",
+        "accessEndpoint": "https://prod-10.uksouth.logic.azure.com:443/workflows/698bd64140d1461cb06dbfd83bae9360",
+        "definition": {
+            "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+            "contentVersion": "1.0.0.0",
+            "parameters": {
+                "$connections": {
+                    "defaultValue": {},
+                    "type": "Object"
+                }
+            },
+            "triggers": {
+                "Microsoft_Sentinel_incident": {
+                    "type": "ApiConnectionWebhook",
+                    "inputs": {
+                        "host": {
+                            "connection": {
+                                "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                            }
+                        },
+                        "body": {
+                            "callback_url": "@{listCallbackUrl()}"
+                        },
+                        "path": "/incident-creation"
+                    }
+                }
+            },
+            "actions": {
+                "Assign_to_Automation_Account": {
+                    "runAfter": {
+                        "Entities_-_Get_Accounts": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "ApiConnection",
+                    "inputs": {
+                        "host": {
+                            "connection": {
+                                "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                            }
+                        },
+                        "method": "put",
+                        "body": {
+                            "incidentArmId": "@triggerBody()?['object']?['id']",
+                            "tagsToAdd": {
+                                "TagsToAdd": [
+                                    {
+                                        "Tag": "Automation"
+                                    }
+                                ]
+                            },
+                            "ownerAction": "Assign",
+                            "owner": "svcsentinelbot@cancer.org.uk"
+                        },
+                        "path": "/Incidents"
+                    }
+                },
+                "Convert_Time_to_correct_format": {
+                    "runAfter": {
+                        "Initialize_Incident_Time_UTC_variable": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "InitializeVariable",
+                    "inputs": {
+                        "variables": [
+                            {
+                                "name": "Incident Time",
+                                "type": "string",
+                                "value": "@{formatDateTime(variables('Incident Time UTC'), 'dd-MM-yyyy HH:mm')}"
+                            }
+                        ]
+                    }
+                },
+                "Current_Run_Job": {
+                    "runAfter": {
+                        "Assign_to_Automation_Account": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "Compose",
+                    "inputs": "https://portal.azure.com/#view/Microsoft_Azure_EMA/LogicAppsMonitorBlade/runid/%2Fsubscriptions%2F7857b1d2-ec90-475c-93cf-8d5d328d0c19%2FresourceGroups%2FCRUK-DR%2Fproviders%2FMicrosoft.Logic%2Fworkflows%2FSentinelPlaybook-Incident-Automation%2Fruns%2F@{workflow().run.name}"
+                },
+                "Entities_-_Get_Accounts": {
+                    "runAfter": {},
+                    "type": "ApiConnection",
+                    "inputs": {
+                        "host": {
+                            "connection": {
+                                "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                            }
+                        },
+                        "method": "post",
+                        "body": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+                        "path": "/entities/account"
+                    }
+                },
+                "For_each": {
+                    "foreach": "@body('Entities_-_Get_Accounts')?['Accounts']",
+                    "actions": {
+                        "Set_UserEntraID_Variable_to_AADUserID": {
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "UserEntraID",
+                                "value": "@items('For_each')?['AadUserId']"
+                            }
+                        }
+                    },
+                    "runAfter": {
+                        "Create_Variable_for_SN_Resolved_Time": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "Foreach"
+                },
+                "Get_user": {
+                    "runAfter": {
+                        "For_each": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "ApiConnection",
+                    "inputs": {
+                        "host": {
+                            "connection": {
+                                "name": "@parameters('$connections')['azuread-1']['connectionId']"
+                            }
+                        },
+                        "method": "get",
+                        "path": "/v1.0/users/@{encodeURIComponent(variables('UserEntraID'))}"
+                    }
+                },
+                "Initialize_Incident_Time_UTC_variable": {
+                    "runAfter": {
+                        "Initialize_UserEntraID_variable": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "InitializeVariable",
+                    "inputs": {
+                        "variables": [
+                            {
+                                "name": "Incident Time UTC",
+                                "type": "string",
+                                "value": "@body('Assign_to_Automation_Account')?['properties']?['createdTimeUtc']"
+                            }
+                        ]
+                    }
+                },
+                "Initialize_UserEntraID_variable": {
+                    "runAfter": {
+                        "For_each_1": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "InitializeVariable",
+                    "inputs": {
+                        "variables": [
+                            {
+                                "name": "UserEntraID",
+                                "type": "string"
+                            }
+                        ]
+                    }
+                },
+                "Run_Automated_Responses": {
+                    "actions": {
+                        "Get_user_profile": {
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['office365users']['connectionId']"
+                                    }
+                                },
+                                "method": "get",
+                                "path": "/codeless/v1.0/users/@{encodeURIComponent(body('Get_user')?['userPrincipalName'])}"
+                            }
+                        },
+                        "Parse_JSON": {
+                            "runAfter": {
+                                "Post_adaptive_card_to_InfoSec": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@outputs('Post_adaptive_card_to_InfoSec')",
+                                "schema": {
+                                    "properties": {
+                                        "body": {
+                                            "properties": {
+                                                "data": {
+                                                    "properties": {
+                                                        "userComments": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "messageId": {
+                                                    "type": "string"
+                                                },
+                                                "messageLink": {
+                                                    "type": "string"
+                                                },
+                                                "responder": {
+                                                    "properties": {
+                                                        "displayName": {
+                                                            "type": "string"
+                                                        },
+                                                        "email": {
+                                                            "type": "string"
+                                                        },
+                                                        "objectId": {
+                                                            "type": "string"
+                                                        },
+                                                        "tenantId": {
+                                                            "type": "string"
+                                                        },
+                                                        "userPrincipalName": {
+                                                            "type": "string"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                },
+                                                "responseTime": {
+                                                    "type": "string"
+                                                },
+                                                "submitActionId": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        },
+                                        "headers": {
+                                            "properties": {
+                                                "Accept-Encoding": {
+                                                    "type": "string"
+                                                },
+                                                "CLIENT-IP": {
+                                                    "type": "string"
+                                                },
+                                                "Content-Length": {
+                                                    "type": "string"
+                                                },
+                                                "Content-Type": {
+                                                    "type": "string"
+                                                },
+                                                "DISGUISED-HOST": {
+                                                    "type": "string"
+                                                },
+                                                "Host": {
+                                                    "type": "string"
+                                                },
+                                                "Max-Forwards": {
+                                                    "type": "string"
+                                                },
+                                                "WAS-DEFAULT-HOSTNAME": {
+                                                    "type": "string"
+                                                },
+                                                "X-ARR-LOG-ID": {
+                                                    "type": "string"
+                                                },
+                                                "X-ARR-SSL": {
+                                                    "type": "string"
+                                                },
+                                                "X-AppService-Proto": {
+                                                    "type": "string"
+                                                },
+                                                "X-Forwarded-For": {
+                                                    "type": "string"
+                                                },
+                                                "X-Forwarded-Proto": {
+                                                    "type": "string"
+                                                },
+                                                "X-Forwarded-TlsVersion": {
+                                                    "type": "string"
+                                                },
+                                                "X-Original-URL": {
+                                                    "type": "string"
+                                                },
+                                                "X-SITE-DEPLOYMENT-ID": {
+                                                    "type": "string"
+                                                },
+                                                "X-WAWS-Unencoded-URL": {
+                                                    "type": "string"
+                                                },
+                                                "client-request-id": {
+                                                    "type": "string"
+                                                },
+                                                "x-ms-activity-vector": {
+                                                    "type": "string"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "Raise_INC_in_ServiceNow": {
+                            "runAfter": {
+                                "Get_user_profile": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['service-now']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "cmdb_ci": "Microsoft Sentinel",
+                                    "priority": "P3",
+                                    "u_security_related": "@true",
+                                    "short_description": "@{triggerBody()?['object']?['properties']?['incidentNumber']} - High Confidence Phishing Release Request\n for @{body('Get_user')?['userPrincipalName']}",
+                                    "caller_id": "@body('Get_user_profile')?['userPrincipalName']",
+                                    "assignment_group": "IT Security Governance & Control",
+                                    "description": "User @{body('Get_user_profile')?['givenName']} @{body('Get_user_profile')?['surname']} has requested the release of a High Confidence Phishing email\n\n\nAlert Date / Time: @{variables('Incident Time')}\n\n\n",
+                                    "u_source": "Automated"
+                                },
+                                "path": "/api/now/v2/table/@{encodeURIComponent('incident')}",
+                                "queries": {
+                                    "sysparm_display_value": true,
+                                    "sysparm_exclude_reference_link": true
+                                }
+                            }
+                        },
+                        "Update_Sentinel_with_SN_Ticket": {
+                            "runAfter": {
+                                "Raise_INC_in_ServiceNow": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "body": {
+                                    "incidentArmId": "@body('Assign_to_Automation_Account')?['id']",
+                                    "message": "<p>Ticket Raised to InfoSec in SN @{body('Raise_INC_in_ServiceNow')?['result']?['number']} </p>"
+                                },
+                                "path": "/Incidents/Comment"
+                            }
+                        },
+                        "Set_SN_Current_Time": {
+                            "runAfter": {
+                                "Parse_JSON": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "SNCurrentTime",
+                                "value": "@{formatDateTime(utcNow(),'dd-MM-yyyy HH:mm:ss')}"
+                            }
+                        },
+                        "Compose": {
+                            "runAfter": {
+                                "Switch": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Compose",
+                            "inputs": "Finished"
+                        },
+                        "Post_adaptive_card_to_InfoSec": {
+                            "runAfter": {
+                                "Update_Sentinel_with_SN_Ticket": [
+                                    "Succeeded",
+                                    "Skipped"
+                                ]
+                            },
+                            "type": "ApiConnectionWebhook",
+                            "inputs": {
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['teams_1']['connectionId']"
+                                    }
+                                },
+                                "body": {
+                                    "notificationUrl": "@{listCallbackUrl()}",
+                                    "body": {
+                                        "messageBody": "{\n    \"type\": \"AdaptiveCard\",\n    \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n    \"version\": \"1.4\",\n    \"actions\": [\n        {\n            \"type\": \"Action.Submit\",\n            \"title\": \"Approved\"\n        },\n        {\n            \"type\": \"Action.Submit\",\n            \"title\": \"Rejected\"\n        },\n        {\n            \"type\": \"Action.Submit\",\n            \"title\": \"Referred\"\n        }\n    ],\n    \"body\": [\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"@{triggerBody()?['object']?['properties']?['incidentNumber']} - High Confidence Phishing Release Request for  @{body('Get_user')?['userPrincipalName']}\n\n[Alert Link](@{variables('Alert URL')})\n\nTicket Raised under [@{body('Raise_INC_in_ServiceNow')?['result']?['number']}](https://cancerresearchuk.service-now.com/now/nav/ui/classic/params/target/incident.do%3Fsys_id%3D@{body('Raise_INC_in_ServiceNow')?['result']?['sys_id']})\",\n            \"wrap\": true\n        },\n    {\n      \"type\": \"Input.Text\",\n      \"id\": \"userComments\",\n      \"placeholder\": \"Enter your comments here...\",\n      \"isMultiline\": true\n    }\n    ]\n}",
+                                        "updateMessage": "SN Ticket @{body('Raise_INC_in_ServiceNow')?['result']?['number']} will be updated",
+                                        "recipient": {
+                                            "recipient": "19:c01d3ac61b93456b9630c98ef634a862@thread.v2"
+                                        }
+                                    }
+                                },
+                                "path": "/v1.0/teams/conversation/gatherinput/poster/Flow bot/location/@{encodeURIComponent('Group chat')}/$subscriptions"
+                            }
+                        },
+                        "Switch": {
+                            "runAfter": {
+                                "Set_SN_Current_Time": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "cases": {
+                                "Approved": {
+                                    "case": "Approved",
+                                    "actions": {
+                                        "Update_Record": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['service-now']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "put",
+                                                "body": {
+                                                    "u_resolved_by": "@body('Parse_JSON')?['body']?['responder']?['userPrincipalName']",
+                                                    "state": "3",
+                                                    "u_resolved": "@variables('SNCurrentTime')",
+                                                    "assigned_to": "@body('Parse_JSON')?['body']?['responder']?['userPrincipalName']",
+                                                    "work_notes": "Release of the email was approved by InfoSec - This will appear in the users mailbox shortly\nAny additional comments from InfoSec will appear below\n@{body('Parse_JSON')?['body']?['data']?['userComments']}",
+                                                    "close_code": "Solved (Permanently)",
+                                                    "close_notes": "Release of the email was approved by InfoSec - This will appear in the users mailbox shortly\nAny additional comments from InfoSec will appear below\n\n@{body('Parse_JSON')?['body']?['data']?['userComments']}",
+                                                    "location": "Home Based - England (HOM)",
+                                                    "u_contact_telephone": "0"
+                                                },
+                                                "path": "/api/now/v2/table/@{encodeURIComponent('incident')}/@{encodeURIComponent(body('Raise_INC_in_ServiceNow')?['result']?['sys_id'])}"
+                                            }
+                                        },
+                                        "Update_incident": {
+                                            "runAfter": {
+                                                "Update_Record": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "put",
+                                                "body": {
+                                                    "incidentArmId": "@body('Assign_to_Automation_Account')?['id']",
+                                                    "tagsToAdd": {
+                                                        "TagsToAdd": [
+                                                            {
+                                                                "Tag": "Automation"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "ownerAction": "Assign",
+                                                    "owner": "svcsentinelbot@cancer.org.uk",
+                                                    "status": "Closed",
+                                                    "classification": {
+                                                        "ClassificationAndReason": "BenignPositive - SuspiciousButExpected",
+                                                        "ClassificationReasonText": "InfoSec has approved the release of this email and @{body('Update_Record')?['result']?['number']} is now marked as resolved"
+                                                    }
+                                                },
+                                                "path": "/Incidents"
+                                            }
+                                        }
+                                    }
+                                },
+                                "Rejected": {
+                                    "case": "Rejected",
+                                    "actions": {
+                                        "Update_Record_2": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['service-now']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "put",
+                                                "body": {
+                                                    "u_resolved_by": "@body('Parse_JSON')?['body']?['responder']?['userPrincipalName']",
+                                                    "state": "3",
+                                                    "u_resolved": "@variables('SNCurrentTime')",
+                                                    "assigned_to": "@body('Parse_JSON')?['body']?['responder']?['userPrincipalName']",
+                                                    "work_notes": "Release of this email was denied by InfoSec - Please find their comments and explanation below\n\n@{body('Parse_JSON')?['body']?['data']?['userComments']}",
+                                                    "close_code": "Solved (Permanently)",
+                                                    "close_notes": "Release of this email was denied by InfoSec - Please find their comments and explanation below\n\n@{body('Parse_JSON')?['body']?['data']?['userComments']}",
+                                                    "location": "Home Based - England (HOM)",
+                                                    "u_contact_telephone": "0"
+                                                },
+                                                "path": "/api/now/v2/table/@{encodeURIComponent('incident')}/@{encodeURIComponent(body('Raise_INC_in_ServiceNow')?['result']?['sys_id'])}"
+                                            }
+                                        },
+                                        "Update_incident_2": {
+                                            "runAfter": {
+                                                "Update_Record_2": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "put",
+                                                "body": {
+                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                    "tagsToAdd": {
+                                                        "TagsToAdd": [
+                                                            {
+                                                                "Tag": "Automation"
+                                                            }
+                                                        ]
+                                                    },
+                                                    "ownerAction": "Assign",
+                                                    "owner": "svcsentinelbot@cancer.org.uk",
+                                                    "status": "Closed",
+                                                    "classification": {
+                                                        "ClassificationAndReason": "TruePositive - SuspiciousActivity",
+                                                        "ClassificationReasonText": "InfoSec has denied the release of this email and the SN ticket @{body('Raise_INC_in_ServiceNow')?['result']?['number']} has been closed. Infosec comments on this request are: \n@{body('Parse_JSON')?['body']?['data']?['userComments']}"
+                                                    }
+                                                },
+                                                "path": "/Incidents"
+                                            }
+                                        }
+                                    }
+                                },
+                                "Referred_to_MS": {
+                                    "case": "Referred",
+                                    "actions": {
+                                        "Update_Record_3": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['service-now']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "put",
+                                                "body": {
+                                                    "state": "9",
+                                                    "assigned_to": "@body('Parse_JSON')?['body']?['responder']?['userPrincipalName']",
+                                                    "work_notes": "This email has been referred to Microsoft for further analysis - InfoSec will provide feedback when this process is complete. Any additional comments added by them to this case can be found below\n\n@{body('Parse_JSON')?['body']?['data']?['userComments']}",
+                                                    "location": "Home Based - England (HOM)",
+                                                    "u_contact_telephone": "0"
+                                                },
+                                                "path": "/api/now/v2/table/@{encodeURIComponent('incident')}/@{encodeURIComponent(body('Raise_INC_in_ServiceNow')?['result']?['sys_id'])}"
+                                            }
+                                        },
+                                        "Wait_2_hours": {
+                                            "runAfter": {
+                                                "Update_Record_3": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Wait",
+                                            "inputs": {
+                                                "interval": {
+                                                    "count": 2,
+                                                    "unit": "Hour"
+                                                }
+                                            }
+                                        },
+                                        "Parse_JSON2": {
+                                            "runAfter": {
+                                                "Post_adaptive_card_to_InfoSec2": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ParseJson",
+                                            "inputs": {
+                                                "content": "@Outputs('Post_adaptive_card_to_InfoSec2')",
+                                                "schema": {
+                                                    "properties": {
+                                                        "body": {
+                                                            "properties": {
+                                                                "data": {
+                                                                    "properties": {
+                                                                        "userComments": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    },
+                                                                    "type": "object"
+                                                                },
+                                                                "messageId": {
+                                                                    "type": "string"
+                                                                },
+                                                                "messageLink": {
+                                                                    "type": "string"
+                                                                },
+                                                                "responder": {
+                                                                    "properties": {
+                                                                        "displayName": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "email": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "objectId": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "tenantId": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "userPrincipalName": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    },
+                                                                    "type": "object"
+                                                                },
+                                                                "responseTime": {
+                                                                    "type": "string"
+                                                                },
+                                                                "submitActionId": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        },
+                                                        "headers": {
+                                                            "properties": {
+                                                                "Accept-Encoding": {
+                                                                    "type": "string"
+                                                                },
+                                                                "CLIENT-IP": {
+                                                                    "type": "string"
+                                                                },
+                                                                "Content-Length": {
+                                                                    "type": "string"
+                                                                },
+                                                                "Content-Type": {
+                                                                    "type": "string"
+                                                                },
+                                                                "DISGUISED-HOST": {
+                                                                    "type": "string"
+                                                                },
+                                                                "Host": {
+                                                                    "type": "string"
+                                                                },
+                                                                "Max-Forwards": {
+                                                                    "type": "string"
+                                                                },
+                                                                "WAS-DEFAULT-HOSTNAME": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-ARR-LOG-ID": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-ARR-SSL": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-AppService-Proto": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-Forwarded-For": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-Forwarded-Proto": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-Forwarded-TlsVersion": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-Original-URL": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-SITE-DEPLOYMENT-ID": {
+                                                                    "type": "string"
+                                                                },
+                                                                "X-WAWS-Unencoded-URL": {
+                                                                    "type": "string"
+                                                                },
+                                                                "client-request-id": {
+                                                                    "type": "string"
+                                                                },
+                                                                "x-ms-activity-vector": {
+                                                                    "type": "string"
+                                                                }
+                                                            },
+                                                            "type": "object"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            }
+                                        },
+                                        "Set_SN_Current_Time2": {
+                                            "runAfter": {
+                                                "Parse_JSON2": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "SetVariable",
+                                            "inputs": {
+                                                "name": "SNCurrentTime",
+                                                "value": "@{formatDateTime(utcNow(),'dd-MM-yyyy HH:mm:ss')}"
+                                            }
+                                        },
+                                        "Switch_1": {
+                                            "runAfter": {
+                                                "Set_SN_Current_Time2": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "cases": {
+                                                "Approved2": {
+                                                    "case": "Approved",
+                                                    "actions": {
+                                                        "Update_Record_4": {
+                                                            "type": "ApiConnection",
+                                                            "inputs": {
+                                                                "host": {
+                                                                    "connection": {
+                                                                        "name": "@parameters('$connections')['service-now']['connectionId']"
+                                                                    }
+                                                                },
+                                                                "method": "put",
+                                                                "body": {
+                                                                    "u_resolved_by": "@body('Parse_JSON2')?['body']?['responder']?['userPrincipalName']",
+                                                                    "state": "3",
+                                                                    "u_resolved": "@variables('SNCurrentTime')",
+                                                                    "assigned_to": "@body('Parse_JSON2')?['body']?['responder']?['userPrincipalName']",
+                                                                    "work_notes": "Release of the email was approved by InfoSec - This will appear in the users mailbox shortly\nAny additional comments from InfoSec will appear below\n@{body('Parse_JSON2')?['body']?['data']?['userComments']}",
+                                                                    "close_code": "Solved (Permanently)",
+                                                                    "close_notes": "Release of the email was approved by InfoSec - This will appear in the users mailbox shortly\nAny additional comments from InfoSec will appear below\n\n@{body('Parse_JSON2')?['body']?['data']?['userComments']}"
+                                                                },
+                                                                "path": "/api/now/v2/table/@{encodeURIComponent('incident')}/@{encodeURIComponent(body('Raise_INC_in_ServiceNow')?['result']?['sys_id'])}"
+                                                            }
+                                                        },
+                                                        "Update_incident_1": {
+                                                            "runAfter": {
+                                                                "Update_Record_4": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "type": "ApiConnection",
+                                                            "inputs": {
+                                                                "host": {
+                                                                    "connection": {
+                                                                        "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                                                    }
+                                                                },
+                                                                "method": "put",
+                                                                "body": {
+                                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                                    "tagsToAdd": {
+                                                                        "TagsToAdd": [
+                                                                            {
+                                                                                "Tag": "Automation"
+                                                                            }
+                                                                        ]
+                                                                    },
+                                                                    "ownerAction": "Assign",
+                                                                    "owner": "svcsentinelbot@cancer.org.uk",
+                                                                    "status": "Closed",
+                                                                    "classification": {
+                                                                        "ClassificationAndReason": "BenignPositive - SuspiciousButExpected",
+                                                                        "ClassificationReasonText": "InfoSec has approved the release of this email and @{body('Raise_INC_in_ServiceNow')?['result']?['number']} is now marked as resolved"
+                                                                    }
+                                                                },
+                                                                "path": "/Incidents"
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "Rejected2": {
+                                                    "case": "Rejected",
+                                                    "actions": {
+                                                        "Update_Record_5": {
+                                                            "type": "ApiConnection",
+                                                            "inputs": {
+                                                                "host": {
+                                                                    "connection": {
+                                                                        "name": "@parameters('$connections')['service-now']['connectionId']"
+                                                                    }
+                                                                },
+                                                                "method": "put",
+                                                                "body": {
+                                                                    "u_resolved_by": "@{body('Parse_JSON2')?['body']?['responder']?['userPrincipalName']}",
+                                                                    "state": "3",
+                                                                    "u_resolved": "@variables('SNCurrentTime')",
+                                                                    "assigned_to": "@{body('Parse_JSON2')?['body']?['responder']?['userPrincipalName']}",
+                                                                    "work_notes": "Release of this email was denied by InfoSec - Please find their comments and explanation below\n\n@{body('Parse_JSON2')?['body']?['data']?['userComments']}",
+                                                                    "close_code": "Solved (Permanently)",
+                                                                    "close_notes": "Release of this email was denied by InfoSec - Please find their comments and explanation below\n\n@{body('Parse_JSON2')?['body']?['data']?['userComments']}"
+                                                                },
+                                                                "path": "/api/now/v2/table/@{encodeURIComponent('incident')}/@{encodeURIComponent(body('Raise_INC_in_ServiceNow')?['result']?['sys_id'])}"
+                                                            }
+                                                        },
+                                                        "Update_incident_3": {
+                                                            "runAfter": {
+                                                                "Update_Record_5": [
+                                                                    "Succeeded"
+                                                                ]
+                                                            },
+                                                            "type": "ApiConnection",
+                                                            "inputs": {
+                                                                "host": {
+                                                                    "connection": {
+                                                                        "name": "@parameters('$connections')['azuresentinel-1']['connectionId']"
+                                                                    }
+                                                                },
+                                                                "method": "put",
+                                                                "body": {
+                                                                    "incidentArmId": "@triggerBody()?['object']?['id']",
+                                                                    "tagsToAdd": {
+                                                                        "TagsToAdd": [
+                                                                            {
+                                                                                "Tag": "Automation"
+                                                                            }
+                                                                        ]
+                                                                    },
+                                                                    "ownerAction": "Assign",
+                                                                    "owner": "svcsentinelbot@cancer.org.uk",
+                                                                    "status": "Closed",
+                                                                    "classification": {
+                                                                        "ClassificationAndReason": "TruePositive - SuspiciousActivity",
+                                                                        "ClassificationReasonText": "InfoSec has denied the release of this email and the SN ticket @{body('Raise_INC_in_ServiceNow')?['result']?['number']} has been closed. Infosec comments on this request are: \n\n@{body('Parse_JSON2')?['body']?['data']?['userComments']}"
+                                                                    }
+                                                                },
+                                                                "path": "/Incidents"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "default": {
+                                                "actions": {}
+                                            },
+                                            "expression": "@body('Parse_JSON2')?['body']?['submitActionId']",
+                                            "type": "Switch"
+                                        },
+                                        "Post_adaptive_card_to_InfoSec2": {
+                                            "runAfter": {
+                                                "Wait_2_hours": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnectionWebhook",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['teams-1']['connectionId']"
+                                                    }
+                                                },
+                                                "body": {
+                                                    "notificationUrl": "@listCallbackUrl()",
+                                                    "body": {
+                                                        "messageBody": "{\n    \"type\": \"AdaptiveCard\",\n    \"$schema\": \"http://adaptivecards.io/schemas/adaptive-card.json\",\n    \"version\": \"1.4\",\n    \"actions\": [\n        {\n            \"type\": \"Action.Submit\",\n            \"title\": \"Approved\"\n        },\n        {\n            \"type\": \"Action.Submit\",\n            \"title\": \"Rejected\"\n        }\n    ],\n    \"body\": [\n {\n            \"type\": \"TextBlock\",\n            \"text\": \"**Reminder Alert**\",\n            \"wrap\": true,\n            \"size\": \"ExtraLarge\"\n        },\n        {\n            \"type\": \"TextBlock\",\n            \"text\": \"This release request was previously sent to MS for review - @{triggerBody()?['object']?['properties']?['incidentNumber']} - High Confidence Phishing Release Request for  @{body('Get_user')?['userPrincipalName']}\n\n[Alert Link](@{variables('Alert URL')})\n\nTicket Raised under [@{body('Raise_INC_in_ServiceNow')?['result']?['number']}](https://cancerresearchuk.service-now.com/now/nav/ui/classic/params/target/incident.do%3Fsys_id%3D@{body('Raise_INC_in_ServiceNow')?['result']?['sys_id']})\",\n            \"wrap\": true\n        },\n    {\n      \"type\": \"Input.Text\",\n      \"id\": \"userComments\",\n      \"placeholder\": \"Enter your comments here...\",\n      \"isMultiline\": true\n    }\n    ]\n}",
+                                                        "updateMessage": "SN Ticket @{body('Raise_INC_in_ServiceNow')?['result']?['number']} will be updated",
+                                                        "recipient": {
+                                                            "recipient": "19:c01d3ac61b93456b9630c98ef634a862@thread.v2"
+                                                        }
+                                                    }
+                                                },
+                                                "path": "/v1.0/teams/conversation/gatherinput/poster/Flow bot/location/@{encodeURIComponent('Group chat')}/$subscriptions"
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            "default": {
+                                "actions": {}
+                            },
+                            "expression": "@body('Parse_JSON')?['body']?['submitActionId']",
+                            "type": "Switch"
+                        }
+                    },
+                    "runAfter": {
+                        "Get_user": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "Scope"
+                },
+                "Get_Current_Time_for_SN": {
+                    "runAfter": {
+                        "Convert_Time_to_correct_format": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "InitializeVariable",
+                    "inputs": {
+                        "variables": [
+                            {
+                                "name": "CurrentTime",
+                                "type": "string",
+                                "value": "@{utcNow()\r\n}"
+                            }
+                        ]
+                    }
+                },
+                "Create_Variable_for_SN_Resolved_Time": {
+                    "runAfter": {
+                        "Get_Current_Time_for_SN": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "InitializeVariable",
+                    "inputs": {
+                        "variables": [
+                            {
+                                "name": "SNCurrentTime",
+                                "type": "string"
+                            }
+                        ]
+                    }
+                },
+                "Alert_URL": {
+                    "runAfter": {
+                        "Current_Run_Job": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "InitializeVariable",
+                    "inputs": {
+                        "variables": [
+                            {
+                                "name": "Alert URL",
+                                "type": "string"
+                            }
+                        ]
+                    }
+                },
+                "For_each_1": {
+                    "foreach": "@triggerBody()?['object']?['properties']?['Alerts']",
+                    "actions": {
+                        "Set_Alert_URL_variable": {
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "Alert URL",
+                                "value": "@items('For_each_1')?['properties']?['alertLink']"
+                            }
+                        }
+                    },
+                    "runAfter": {
+                        "Alert_URL": [
+                            "Succeeded"
+                        ]
+                    },
+                    "type": "Foreach"
+                }
+            },
+            "outputs": {}
+        },
+        "parameters": {
+            "$connections": {
+                "value": {
+                    "azuresentinel-1": {
+                        "id": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/providers/Microsoft.Web/locations/uksouth/managedApis/azuresentinel",
+                        "connectionId": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/resourceGroups/CRUK-DR/providers/Microsoft.Web/connections/azuresentinel-2",
+                        "connectionName": "azuresentinel-2"
+                    },
+                    "azuread-1": {
+                        "id": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/providers/Microsoft.Web/locations/uksouth/managedApis/azuread",
+                        "connectionId": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/resourceGroups/CRUK-DR/providers/Microsoft.Web/connections/azuread-7",
+                        "connectionName": "azuread-7"
+                    },
+                    "office365users": {
+                        "id": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/providers/Microsoft.Web/locations/uksouth/managedApis/office365users",
+                        "connectionId": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/resourceGroups/CRUK-DR/providers/Microsoft.Web/connections/office365users",
+                        "connectionName": "office365users"
+                    },
+                    "service-now": {
+                        "id": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/providers/Microsoft.Web/locations/uksouth/managedApis/service-now",
+                        "connectionId": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/resourceGroups/CRUK-DR/providers/Microsoft.Web/connections/service-now-1",
+                        "connectionName": "service-now-1"
+                    },
+                    "teams_1": {
+                        "id": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/providers/Microsoft.Web/locations/uksouth/managedApis/teams",
+                        "connectionId": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/resourceGroups/CRUK-DR/providers/Microsoft.Web/connections/teams-3",
+                        "connectionName": "teams-3"
+                    },
+                    "teams-1": {
+                        "id": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/providers/Microsoft.Web/locations/uksouth/managedApis/teams",
+                        "connectionId": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/resourceGroups/CRUK-DR/providers/Microsoft.Web/connections/teams-2",
+                        "connectionName": "teams-2"
+                    }
+                }
+            }
+        },
+        "endpointsConfiguration": {
+            "workflow": {
+                "outgoingIpAddresses": [
+                    {
+                        "address": "51.140.74.14"
+                    },
+                    {
+                        "address": "51.140.73.85"
+                    },
+                    {
+                        "address": "51.140.78.44"
+                    },
+                    {
+                        "address": "51.140.137.190"
+                    },
+                    {
+                        "address": "51.140.153.135"
+                    },
+                    {
+                        "address": "51.140.28.225"
+                    },
+                    {
+                        "address": "51.140.142.28"
+                    },
+                    {
+                        "address": "51.140.158.24"
+                    },
+                    {
+                        "address": "20.108.102.142"
+                    },
+                    {
+                        "address": "20.108.102.123"
+                    },
+                    {
+                        "address": "20.90.204.228"
+                    },
+                    {
+                        "address": "20.90.204.188"
+                    },
+                    {
+                        "address": "20.108.146.132"
+                    },
+                    {
+                        "address": "20.90.223.4"
+                    },
+                    {
+                        "address": "20.26.15.70"
+                    },
+                    {
+                        "address": "20.26.13.151"
+                    },
+                    {
+                        "address": "4.159.24.241"
+                    },
+                    {
+                        "address": "4.250.55.134"
+                    },
+                    {
+                        "address": "4.159.24.255"
+                    },
+                    {
+                        "address": "4.250.55.217"
+                    },
+                    {
+                        "address": "172.165.88.82"
+                    },
+                    {
+                        "address": "4.250.82.111"
+                    },
+                    {
+                        "address": "4.158.106.101"
+                    },
+                    {
+                        "address": "4.158.105.106"
+                    },
+                    {
+                        "address": "4.250.51.127"
+                    },
+                    {
+                        "address": "4.250.49.230"
+                    },
+                    {
+                        "address": "4.159.26.128"
+                    },
+                    {
+                        "address": "172.166.86.30"
+                    },
+                    {
+                        "address": "4.159.26.151"
+                    },
+                    {
+                        "address": "4.159.26.77"
+                    },
+                    {
+                        "address": "4.159.59.140"
+                    },
+                    {
+                        "address": "4.159.59.13"
+                    },
+                    {
+                        "address": "85.210.65.206"
+                    },
+                    {
+                        "address": "85.210.120.102"
+                    },
+                    {
+                        "address": "4.159.57.40"
+                    },
+                    {
+                        "address": "85.210.66.97"
+                    }
+                ],
+                "accessEndpointIpAddresses": [
+                    {
+                        "address": "51.140.79.109"
+                    },
+                    {
+                        "address": "51.140.78.71"
+                    },
+                    {
+                        "address": "51.140.84.39"
+                    },
+                    {
+                        "address": "51.140.155.81"
+                    },
+                    {
+                        "address": "20.108.102.180"
+                    },
+                    {
+                        "address": "20.90.204.232"
+                    },
+                    {
+                        "address": "20.108.148.173"
+                    },
+                    {
+                        "address": "20.254.10.157"
+                    },
+                    {
+                        "address": "4.159.25.35"
+                    },
+                    {
+                        "address": "4.159.25.50"
+                    },
+                    {
+                        "address": "4.250.87.43"
+                    },
+                    {
+                        "address": "4.158.106.183"
+                    },
+                    {
+                        "address": "4.250.53.153"
+                    },
+                    {
+                        "address": "4.159.26.160"
+                    },
+                    {
+                        "address": "4.159.25.103"
+                    },
+                    {
+                        "address": "4.159.59.224"
+                    },
+                    {
+                        "address": "4.158.138.59"
+                    },
+                    {
+                        "address": "85.210.163.36"
+                    },
+                    {
+                        "address": "85.210.34.209"
+                    },
+                    {
+                        "address": "85.210.36.40"
+                    }
+                ]
+            },
+            "connector": {
+                "outgoingIpAddresses": [
+                    {
+                        "address": "51.140.74.150"
+                    },
+                    {
+                        "address": "51.140.80.51"
+                    },
+                    {
+                        "address": "51.140.61.124"
+                    },
+                    {
+                        "address": "51.105.77.96/27"
+                    },
+                    {
+                        "address": "51.140.148.0/28"
+                    },
+                    {
+                        "address": "20.90.129.0/27"
+                    },
+                    {
+                        "address": "20.90.129.32/28"
+                    },
+                    {
+                        "address": "20.90.125.211"
+                    },
+                    {
+                        "address": "20.90.124.134"
+                    }
+                ]
+            }
+        }
+    },
+    "id": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/resourceGroups/CRUK-DR/providers/Microsoft.Logic/workflows/SPB-PhishingReleaseRequest",
+    "name": "SPB-PhishingReleaseRequest",
+    "type": "Microsoft.Logic/workflows",
+    "location": "uksouth",
+    "tags": {
+        "Portfolio": "TPP"
+    },
+    "identity": {
+        "type": "SystemAssigned",
+        "principalId": "8b2cd354-3470-4ea0-9323-0256b3c4fa20",
+        "tenantId": "4473892f-71e0-46fc-8dec-273902b51349"
+    },
+    "apiVersion": "2015-08-01-preview"
+}

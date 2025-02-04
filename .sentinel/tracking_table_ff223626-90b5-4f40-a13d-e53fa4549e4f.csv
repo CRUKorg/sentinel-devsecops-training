@@ -1,4 +1,4 @@
 FileName, CommitSha
-Detections/Azure_Sentinel_analytic_rule.json,caf8acb96c250ff81bd9b733d4c6cba89f659919
 Detections/Detect CoreBackUp Deletion Activity from related Security Alerts.json,1f63a8834cab7f4549b46d20d92416ee141f9d9f
+Detections/Azure_Sentinel_analytic_rule.json,caf8acb96c250ff81bd9b733d4c6cba89f659919
 

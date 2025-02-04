@@ -1,0 +1,261 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "workspace": {
+            "type": "String"
+        }
+    },
+    "resources": [
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/AutomationRules/f6d0ec52-18c6-4789-b563-59e59af03317')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/f6d0ec52-18c6-4789-b563-59e59af03317')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/AutomationRules",
+            "apiVersion": "2024-04-01-preview",
+            "properties": {
+                "displayName": "RemoveEmailCleanupIncidents",
+                "order": 2,
+                "triggeringLogic": {
+                    "isEnabled": true,
+                    "triggersOn": "Incidents",
+                    "triggersWhen": "Created",
+                    "conditions": [
+                        {
+                            "conditionType": "Property",
+                            "conditionProperties": {
+                                "propertyName": "IncidentTitle",
+                                "operator": "Equals",
+                                "propertyValues": [
+                                    "Email messages containing malicious URL removed after delivery",
+                                    "Email messages containing malicious URL removed after delivery",
+                                    "Email messages from a campaign removed after delivery​ ",
+                                    "Email messages containing malicious URL removed after delivery​ involving one user",
+                                    "Email reported by user as malware or phish",
+                                    "Email reported by user as not junk",
+                                    "Email messages containing malicious URL removed after delivery​",
+                                    "Antimalware Action Taken",
+                                    "Email reported by user as not junk involving one user",
+                                    "Email messages containing malicious URL removed after delivery​ involving multiple users",
+                                    "Email reported by user as malware or phish involving one user",
+                                    "Suspicious connection blocked by network protection",
+                                    "Anomalous Token involving one user",
+                                    "Tenant Allow/Block List entry is about to expire",
+                                    "Email messages removed after delivery​",
+                                    "User requested to release a quarantined message"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "order": 1,
+                        "actionType": "ModifyProperties",
+                        "actionConfiguration": {
+                            "severity": null,
+                            "status": null,
+                            "classification": null,
+                            "classificationReason": null,
+                            "classificationComment": null,
+                            "owner": {
+                                "objectId": "e5f1513f-c427-42c7-9408-d97136800a25",
+                                "email": "Role-Tech-TS-CoreInfrastructureandMicrosoftSystems@cancer.org.uk",
+                                "assignedTo": "Tech - TS - Infra Op - Core Infra & MS",
+                                "userPrincipalName": null
+                            },
+                            "labels": null
+                        }
+                    },
+                    {
+                        "order": 2,
+                        "actionType": "ModifyProperties",
+                        "actionConfiguration": {
+                            "severity": null,
+                            "status": "Closed",
+                            "classification": "BenignPositive",
+                            "classificationReason": "SuspiciousButExpected",
+                            "classificationComment": "Closed by Automation - These are informational only",
+                            "owner": null,
+                            "labels": null
+                        }
+                    },
+                    {
+                        "order": 3,
+                        "actionType": "ModifyProperties",
+                        "actionConfiguration": {
+                            "severity": null,
+                            "status": null,
+                            "classification": null,
+                            "classificationReason": null,
+                            "classificationComment": null,
+                            "owner": null,
+                            "labels": [
+                                {
+                                    "labelName": "Automation",
+                                    "labelType": "User"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/AutomationRules/ae1b8b28-16c1-4492-a974-9b73644a7f7b')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/ae1b8b28-16c1-4492-a974-9b73644a7f7b')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/AutomationRules",
+            "apiVersion": "2024-04-01-preview",
+            "properties": {
+                "displayName": "Remove Duplicated XDR Rules",
+                "order": 3,
+                "triggeringLogic": {
+                    "isEnabled": true,
+                    "triggersOn": "Incidents",
+                    "triggersWhen": "Created",
+                    "conditions": [
+                        {
+                            "conditionType": "Property",
+                            "conditionProperties": {
+                                "propertyName": "IncidentProviderName",
+                                "operator": "Equals",
+                                "propertyValues": [
+                                    "Microsoft 365 Defender"
+                                ]
+                            }
+                        },
+                        {
+                            "conditionType": "Property",
+                            "conditionProperties": {
+                                "propertyName": "IncidentTitle",
+                                "operator": "Equals",
+                                "propertyValues": [
+                                    "Anomalous Token involving one user",
+                                    "Atypical travel involving one user"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "order": 1,
+                        "actionType": "ModifyProperties",
+                        "actionConfiguration": {
+                            "severity": null,
+                            "status": "Closed",
+                            "classification": "TruePositive",
+                            "classificationReason": "SuspiciousActivity",
+                            "classificationComment": "Closing this alert as it is a duplicate of a Sentinel alert which automatically runs the incidents playbook",
+                            "owner": null,
+                            "labels": null
+                        }
+                    },
+                    {
+                        "order": 2,
+                        "actionType": "ModifyProperties",
+                        "actionConfiguration": {
+                            "severity": null,
+                            "status": null,
+                            "classification": null,
+                            "classificationReason": null,
+                            "classificationComment": null,
+                            "owner": {
+                                "objectId": "570fff63-619a-44a8-8bee-5c363cfc3b20",
+                                "email": "svcsentinelbot@cancer.org.uk",
+                                "assignedTo": "Service Account : Sentinel Security Automation",
+                                "userPrincipalName": "svcsentinelbot@cancer.org.uk"
+                            },
+                            "labels": null
+                        }
+                    },
+                    {
+                        "order": 3,
+                        "actionType": "ModifyProperties",
+                        "actionConfiguration": {
+                            "severity": null,
+                            "status": null,
+                            "classification": null,
+                            "classificationReason": null,
+                            "classificationComment": null,
+                            "owner": null,
+                            "labels": [
+                                {
+                                    "labelName": "Automation",
+                                    "labelType": "User"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "id": "[concat(resourceId('Microsoft.OperationalInsights/workspaces/providers', parameters('workspace'), 'Microsoft.SecurityInsights'),'/AutomationRules/caf48c43-0b7e-4de7-a1ed-f4a3e2a9a4a2')]",
+            "name": "[concat(parameters('workspace'),'/Microsoft.SecurityInsights/caf48c43-0b7e-4de7-a1ed-f4a3e2a9a4a2')]",
+            "type": "Microsoft.OperationalInsights/workspaces/providers/AutomationRules",
+            "apiVersion": "2024-04-01-preview",
+            "properties": {
+                "displayName": "High Confidence Phishing Release Request",
+                "order": 4,
+                "triggeringLogic": {
+                    "isEnabled": true,
+                    "triggersOn": "Incidents",
+                    "triggersWhen": "Created",
+                    "conditions": [
+                        {
+                            "conditionType": "Property",
+                            "conditionProperties": {
+                                "propertyName": "IncidentTitle",
+                                "operator": "StartsWith",
+                                "propertyValues": [
+                                    "High Confidence Phishing"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "order": 1,
+                        "actionType": "RunPlaybook",
+                        "actionConfiguration": {
+                            "logicAppResourceId": "/subscriptions/7857b1d2-ec90-475c-93cf-8d5d328d0c19/resourceGroups/CRUK-DR/providers/Microsoft.Logic/workflows/SPB-PhishingReleaseRequest",
+                            "tenantId": "4473892f-71e0-46fc-8dec-273902b51349"
+                        }
+                    },
+                    {
+                        "order": 2,
+                        "actionType": "ModifyProperties",
+                        "actionConfiguration": {
+                            "severity": null,
+                            "status": "Active",
+                            "classification": null,
+                            "classificationReason": null,
+                            "classificationComment": null,
+                            "owner": null,
+                            "labels": null
+                        }
+                    },
+                    {
+                        "order": 3,
+                        "actionType": "ModifyProperties",
+                        "actionConfiguration": {
+                            "severity": null,
+                            "status": null,
+                            "classification": null,
+                            "classificationReason": null,
+                            "classificationComment": null,
+                            "owner": {
+                                "objectId": "570fff63-619a-44a8-8bee-5c363cfc3b20",
+                                "email": "svcsentinelbot@cancer.org.uk",
+                                "assignedTo": "Service Account : Sentinel Security Automation",
+                                "userPrincipalName": "svcsentinelbot@cancer.org.uk"
+                            },
+                            "labels": null
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}
